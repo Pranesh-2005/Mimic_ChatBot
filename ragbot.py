@@ -8,7 +8,7 @@ from openai import AzureOpenAI   # ✅ new import
 # Configure Azure OpenAI client
 client = AzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_KEY"),
-    api_version="2024-02-15-preview",
+    api_version="2025-01-01-preview",
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")  # e.g. https://YOUR-RESOURCE.openai.azure.com/
 )
 
