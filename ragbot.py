@@ -1,19 +1,23 @@
 import gradio as gr
-import openai, os, re, datetime, collections
+import os, re, datetime, collections
 import chromadb
 from chromadb.utils import embedding_functions
 from dataclasses import dataclass, field
+from openai import AzureOpenAI   # ✅ new import
 
-# Configure Azure OpenAI
-openai.api_type = "azure"
-openai.api_key = os.getenv("AZURE_OPENAI_KEY")
-openai.api_base = os.getenv("AZURE_OPENAI_ENDPOINT")  # e.g. https://YOUR-RESOURCE.openai.azure.com/
-openai.api_version = "2024-02-15-preview"
+# Configure Azure OpenAI client
+client = AzureOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_KEY"),
+    api_version="2024-02-15-preview",
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")  # e.g. https://YOUR-RESOURCE.openai.azure.com/
+)
 
 # Chroma for embeddings
 chroma_client = chromadb.Client()
 embedder = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=openai.api_key,
+    api_key=os.getenv("AZURE_OPENAI_KEY"),
+    api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_type="azure",
     model_name="text-embedding-ada-002"
 )
 
@@ -65,14 +69,14 @@ def respond(user_input, persona_name, chat_history, state: SessionState):
     context = "\n".join(results["documents"][0]) if results["documents"] else ""
     system_prompt = f"You are mimicking {persona_name} based on WhatsApp style. Reply casually like them."
 
-    completion = openai.ChatCompletion.create(
-        engine="gpt-35-turbo",  # Or gpt-4o if available
+    completion = client.chat.completions.create(   # ✅ new API
+        model="gpt-35-turbo",  # or your Azure deployment name
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"User said: {user_input}\n\nRelevant past messages:\n{context}\n\nReply in tone of {persona_name}:"}
         ]
     )
-    reply = completion["choices"][0]["message"]["content"]
+    reply = completion.choices[0].message.content   # ✅ new response format
 
     chat_history = chat_history + [(user_input, reply)]
     return chat_history, state
