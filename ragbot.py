@@ -3,25 +3,25 @@ import os, re, datetime, collections
 import chromadb
 from chromadb.utils import embedding_functions
 from dataclasses import dataclass, field
-from openai import AzureOpenAI   # ✅ new import
+from openai import AzureOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 # Configure Azure OpenAI client
 client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),  # Use correct env var
     api_version="2025-01-01-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")  # e.g. https://YOUR-RESOURCE.openai.azure.com/
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
 )
 
 # Chroma for embeddings
 chroma_client = chromadb.Client()
 embedder = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),  # Use the correct env var for consistency
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),  # Use correct env var
     api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_version="2025-01-01-preview",
     api_type="azure",
-    deployment_id="text-embedding-ada-002",  # <-- Add this line, use your deployment name
+    deployment_id="text-embedding-ada-002",  # Use your Azure deployment name
     model_name="text-embedding-ada-002"
 )
 
@@ -56,12 +56,18 @@ def load_chats(files, state: SessionState):
 
     # Build per-person Chroma collection
     for sender, msgs in persona_msgs.items():
-        collection = chroma_client.create_collection(name=f"{sender}_{id(state)}", embedding_function=embedder)
+        # Sanitize collection name for ChromaDB
+        safe_sender = re.sub(r'[^a-zA-Z0-9._-]', '_', sender)
+        safe_name = f"{safe_sender}_{id(state)}"
+        safe_name = re.sub(r'^[^a-zA-Z0-9]+', '', safe_name)
+        safe_name = re.sub(r'[^a-zA-Z0-9]+$', '', safe_name)
+        collection = chroma_client.create_collection(name=safe_name, embedding_function=embedder)
         for i, m in enumerate(msgs):
-            collection.add(documents=[m], ids=[f"{sender}_{i}"])
+            collection.add(documents=[m], ids=[f"{safe_sender}_{i}"])
         state.chroma_dbs[sender] = collection
 
-    return gr.Dropdown(choices=state.personas, value=(state.personas[0] if state.personas else None)), f"Loaded {sum(len(v) for v in persona_msgs.values())} messages", state
+    # Update dropdown choices and value using gr.update
+    return gr.update(choices=state.personas, value=(state.personas[0] if state.personas else None)), f"Loaded {sum(len(v) for v in persona_msgs.values())} messages", state
 
 def respond(user_input, persona_name, chat_history, state: SessionState):
     if not persona_name or persona_name not in state.chroma_dbs:
@@ -73,14 +79,14 @@ def respond(user_input, persona_name, chat_history, state: SessionState):
     context = "\n".join(results["documents"][0]) if results["documents"] else ""
     system_prompt = f"You are mimicking {persona_name} based on WhatsApp style. Reply casually like them."
 
-    completion = client.chat.completions.create(   # ✅ new API
+    completion = client.chat.completions.create(
         model="gpt-4.1",  # or your Azure deployment name
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"User said: {user_input}\n\nRelevant past messages:\n{context}\n\nReply in tone of {persona_name}:"}
         ]
     )
-    reply = completion.choices[0].message.content   # ✅ new response format
+    reply = completion.choices[0].message.content
 
     chat_history = chat_history + [(user_input, reply)]
     return chat_history, state
