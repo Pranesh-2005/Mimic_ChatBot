@@ -5,23 +5,25 @@ from chromadb.utils import embedding_functions
 from dataclasses import dataclass, field
 from openai import AzureOpenAI
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
+
 # Configure Azure OpenAI client
 client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),  # Use correct env var
+    api_key=os.getenv("AZURE_OPENAI_KEY"),
     api_version="2025-01-01-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")  # e.g. https://YOUR-RESOURCE.openai.azure.com/
 )
 
 # Chroma for embeddings
 chroma_client = chromadb.Client()
 embedder = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),  # Use correct env var
+    api_key=os.getenv("AZURE_OPENAI_KEY"),
     api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_version="2025-01-01-preview",
     api_type="azure",
-    deployment_id="text-embedding-ada-002",  # Use your Azure deployment name
+    deployment_id="text-embedding-ada-002",  # your embedding deployment name
     model_name="text-embedding-ada-002"
 )
 
@@ -29,6 +31,17 @@ embedder = embedding_functions.OpenAIEmbeddingFunction(
 class SessionState:
     chroma_dbs: dict = field(default_factory=dict)  # persona_name -> chroma collection
     personas: list = field(default_factory=list)
+
+def sanitize_name(name: str) -> str:
+    """Sanitize names to be valid Chroma collection IDs."""
+    # Replace spaces and invalid chars with "_"
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
+    # Ensure starts/ends with alphanumeric
+    if not safe[0].isalnum():
+        safe = "a" + safe
+    if not safe[-1].isalnum():
+        safe = safe + "0"
+    return safe[:50]  # keep under 50 chars just to be safe
 
 def parse_whatsapp_text(text: str):
     messages = []
@@ -56,18 +69,19 @@ def load_chats(files, state: SessionState):
 
     # Build per-person Chroma collection
     for sender, msgs in persona_msgs.items():
-        # Sanitize collection name for ChromaDB
-        safe_sender = re.sub(r'[^a-zA-Z0-9._-]', '_', sender)
-        safe_name = f"{safe_sender}_{id(state)}"
-        safe_name = re.sub(r'^[^a-zA-Z0-9]+', '', safe_name)
-        safe_name = re.sub(r'[^a-zA-Z0-9]+$', '', safe_name)
-        collection = chroma_client.create_collection(name=safe_name, embedding_function=embedder)
+        collection_name = sanitize_name(f"{sender}_{id(state)}")
+        collection = chroma_client.create_collection(
+            name=collection_name,
+            embedding_function=embedder
+        )
         for i, m in enumerate(msgs):
-            collection.add(documents=[m], ids=[f"{safe_sender}_{i}"])
+            collection.add(documents=[m], ids=[f"{sender}_{i}"])
         state.chroma_dbs[sender] = collection
 
-    # Update dropdown choices and value using gr.update
-    return gr.update(choices=state.personas, value=(state.personas[0] if state.personas else None)), f"Loaded {sum(len(v) for v in persona_msgs.values())} messages", state
+    return gr.Dropdown(
+        choices=state.personas,
+        value=(state.personas[0] if state.personas else None)
+    ), f"Loaded {sum(len(v) for v in persona_msgs.values())} messages", state
 
 def respond(user_input, persona_name, chat_history, state: SessionState):
     if not persona_name or persona_name not in state.chroma_dbs:
@@ -104,7 +118,7 @@ with gr.Blocks() as demo:
     persona = gr.Dropdown(label="Choose persona")
     load_btn = gr.Button("Build personas")
     status = gr.Markdown("")
-    chatbot = gr.Chatbot()
+    chatbot = gr.Chatbot(type="messages")  # ✅ fixed deprecation warning
     txt = gr.Textbox(placeholder="Say something...")
     send = gr.Button("Send")
     purge_btn = gr.Button("Purge")
