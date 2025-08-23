@@ -70,7 +70,7 @@ def respond(user_input, persona_name, chat_history, state: SessionState):
     system_prompt = f"You are mimicking {persona_name} based on WhatsApp style. Reply casually like them."
 
     completion = client.chat.completions.create(   # ✅ new API
-        model="gpt-35-turbo",  # or your Azure deployment name
+        model="gpt-4.1",  # or your Azure deployment name
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"User said: {user_input}\n\nRelevant past messages:\n{context}\n\nReply in tone of {persona_name}:"}
@@ -105,4 +105,4 @@ with gr.Blocks() as demo:
     purge_btn.click(purge, inputs=[state], outputs=[chatbot, status, state])
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch()
