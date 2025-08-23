@@ -4,7 +4,9 @@ import chromadb
 from chromadb.utils import embedding_functions
 from dataclasses import dataclass, field
 from openai import AzureOpenAI   # ✅ new import
+from dotenv import load_dotenv
 
+load_dotenv()
 # Configure Azure OpenAI client
 client = AzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_KEY"),
