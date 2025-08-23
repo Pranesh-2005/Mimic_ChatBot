@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 # Configure Azure OpenAI client
 client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),  # Use correct env var
+    api_key=os.getenv("AZURE_OPENAI_KEY"),  # Use correct env var
     api_version="2025-01-01-preview",
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
 )
@@ -17,7 +17,7 @@ client = AzureOpenAI(
 # Chroma for embeddings
 chroma_client = chromadb.Client()
 embedder = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),  # Use correct env var
+    api_key=os.getenv("AZURE_OPENAI_KEY"),  # Use correct env var
     api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_version="2025-01-01-preview",
     api_type="azure",
