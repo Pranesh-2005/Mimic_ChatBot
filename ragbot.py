@@ -17,10 +17,11 @@ client = AzureOpenAI(
 # Chroma for embeddings
 chroma_client = chromadb.Client()
 embedder = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),
+    api_key=os.getenv("AZURE_OPENAI_KEY"),  # Use the correct env var for consistency
     api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_version="2025-01-01-preview",
     api_type="azure",
+    deployment_id="text-embedding-ada-002",  # <-- Add this line, use your deployment name
     model_name="text-embedding-ada-002"
 )
 
