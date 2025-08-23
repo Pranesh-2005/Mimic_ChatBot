@@ -53,40 +53,48 @@ def load_chats(files, state: SessionState):
         all_msgs.extend(parse_whatsapp_text(txt))
 
     if not all_msgs:
+        print("[LOG] No messages found.")
         return "No messages found.", state
 
-    # Build one Chroma collection for all messages
     collection = chroma_client.create_collection(
         name=f"whatsapp_{id(state)}",
         embedding_function=embedder
     )
     for i, m in enumerate(all_msgs):
         collection.add(documents=[m], ids=[f"msg_{i}"])
+        if i % 100 == 0:  # log every 100 msgs
+            print(f"[LOG] Stored {i} messages so far...")
 
+    print(f"[LOG] Finished loading {len(all_msgs)} messages into Chroma.")
     state.chroma_db = collection
     state.loaded = True
     return f"Loaded {len(all_msgs)} messages into memory.", state
 
 def respond(user_input, chat_history, state: SessionState):
     if not state.loaded or not state.chroma_db:
-        return chat_history, state
+        print("[LOG] No chat history loaded yet.")
+        return chat_history, state, ""
 
+    print(f"[LOG] User input: {user_input}")
     results = state.chroma_db.query(query_texts=[user_input], n_results=5)
     context = "\n".join(results["documents"][0]) if results["documents"] else ""
+    print(f"[LOG] Retrieved {len(results['documents'][0]) if results['documents'] else 0} relevant messages.")
 
     completion = client.chat.completions.create(
-        model="gpt-4.1",  # use your Azure deployment
+        model="gpt-4.1",  # your Azure deployment
         messages=[
             {"role": "system", "content": "You are chatting casually based on WhatsApp history."},
             {"role": "user", "content": f"User said: {user_input}\n\nRelevant past messages:\n{context}"}
         ]
     )
     reply = completion.choices[0].message.content
+    print(f"[LOG] Assistant reply: {reply[:60]}...")
 
     chat_history = chat_history + [{"role": "user", "content": user_input}, {"role": "assistant", "content": reply}]
-    return chat_history, state
+    return chat_history, state, ""  # clear textbox
 
 def purge(state: SessionState):
+    print("[LOG] Purging session data.")
     state.chroma_db = None
     state.loaded = False
     return None, "Purged session data.", state
@@ -98,14 +106,14 @@ with gr.Blocks() as demo:
     files = gr.File(label="Upload WhatsApp .txt", file_count="multiple", type="filepath")
     load_btn = gr.Button("Load Chats")
     status = gr.Markdown("")
-    chatbot = gr.Chatbot(type="messages")  # ✅ new format
+    chatbot = gr.Chatbot(type="messages")
     txt = gr.Textbox(placeholder="Say something...")
     send = gr.Button("Send")
     purge_btn = gr.Button("Purge")
 
     load_btn.click(load_chats, inputs=[files, state], outputs=[status, state])
-    send.click(respond, inputs=[txt, chatbot, state], outputs=[chatbot, state])
-    txt.submit(respond, inputs=[txt, chatbot, state], outputs=[chatbot, state])
+    send.click(respond, inputs=[txt, chatbot, state], outputs=[chatbot, state, txt])
+    txt.submit(respond, inputs=[txt, chatbot, state], outputs=[chatbot, state, txt])
     purge_btn.click(purge, inputs=[state], outputs=[chatbot, status, state])
 
 if __name__ == "__main__":
